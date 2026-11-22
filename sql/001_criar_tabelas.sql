@@ -1,0 +1,61 @@
+-- Estrutura das tabelas de controle usadas pelo robô (SQL Server).
+-- Nomes genéricos; no ambiente real o cadastro do RH vem do ERP.
+
+IF SCHEMA_ID('identidade') IS NULL
+    EXEC('CREATE SCHEMA identidade');
+GO
+
+-- Espelho dos colaboradores ativos no RH (alimentado pelo batimento)
+CREATE TABLE identidade.TB_COLABORADOR_ATIVO (
+    NU_CPF_COLABORADOR VARCHAR(11)  NOT NULL CONSTRAINT PK_TB_COLABORADOR_ATIVO PRIMARY KEY,
+    NM_COLABORADOR     VARCHAR(150) NOT NULL,
+    ID_CENTRO_CUSTO    VARCHAR(20)  NOT NULL,
+    CENTRO_CUSTO       VARCHAR(100) NULL,
+    NM_FUNCAO          VARCHAR(100) NULL,
+    DESC_FUNCAO        VARCHAR(150) NULL,
+    AFASTAMENTO        CHAR(1)      NULL,
+    DT_ATUALIZACAO     DATETIME     NOT NULL CONSTRAINT DF_TB_COLABORADOR_ATIVO_DT DEFAULT GETDATE()
+);
+GO
+
+-- Tabela principal: um registro por conta do AD gerenciada pelo robô
+CREATE TABLE identidade.TB_USUARIO_AD (
+    ID                 INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_TB_USUARIO_AD PRIMARY KEY,
+    NM_COLABORADOR     VARCHAR(150) NOT NULL,
+    NM_LOGIN           VARCHAR(64)  NOT NULL,   -- sAMAccountName
+    NU_CPF_COLABORADOR VARCHAR(11)  NOT NULL,   -- também gravado na description do AD
+    DESC_FUNCAO        VARCHAR(150) NULL,
+    ID_CENTRO_CUSTO    VARCHAR(20)  NULL,
+    CENTRO_CUSTO       VARCHAR(100) NULL,
+    NM_FUNCAO          VARCHAR(100) NULL,
+    USER_DN            VARCHAR(400) NOT NULL,   -- DN esperado, ou 'CENTRO_CUSTO INVALIDO'
+    GRUPO_DN           VARCHAR(400) NOT NULL,
+    TP_STATUS          TINYINT      NOT NULL CONSTRAINT DF_TB_USUARIO_AD_STATUS DEFAULT 0,  -- 0 pendente, 1 ativo, 2 desligado
+    AFASTAMENTO        CHAR(1)      NULL,
+    DT_CADASTRO        DATETIME     NOT NULL CONSTRAINT DF_TB_USUARIO_AD_CAD DEFAULT GETDATE(),
+    DT_ATUALIZACAO     DATETIME     NULL
+);
+GO
+
+CREATE INDEX IX_TB_USUARIO_AD_CPF    ON identidade.TB_USUARIO_AD (NU_CPF_COLABORADOR) INCLUDE (TP_STATUS);
+CREATE INDEX IX_TB_USUARIO_AD_STATUS ON identidade.TB_USUARIO_AD (TP_STATUS) INCLUDE (NM_LOGIN, USER_DN, GRUPO_DN);
+GO
+
+-- Fila de movimentação: recalculada (TRUNCATE + procedure) a cada execução
+CREATE TABLE identidade.TB_FILA_MOVIMENTACAO_AD (
+    NU_CPF_COLABORADOR VARCHAR(11)  NOT NULL,
+    USER_DN            VARCHAR(400) NOT NULL,   -- destino calculado
+    GRUPO              VARCHAR(400) NOT NULL,
+    ID_CENTRO_CUSTO    VARCHAR(20)  NULL,
+    TP_STATUS          TINYINT      NOT NULL CONSTRAINT DF_TB_FILA_MOV_STATUS DEFAULT 0,
+    DT_ATUALIZACAO     DATETIME     NULL
+);
+GO
+
+-- Parâmetro: centro de custo -> OU e grupo do AD
+CREATE TABLE identidade.TB_CENTRO_CUSTO_AD (
+    ID_CENTRO_CUSTO VARCHAR(20)  NOT NULL CONSTRAINT PK_TB_CENTRO_CUSTO_AD PRIMARY KEY,
+    OU_DN           VARCHAR(400) NOT NULL,
+    GRUPO_DN        VARCHAR(400) NOT NULL
+);
+GO
